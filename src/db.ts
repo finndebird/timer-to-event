@@ -6,13 +6,13 @@
 
 import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { resolve } from 'path';
 import { createRequire } from 'module';
 
 const DB_FILE = resolve('data.sqlite');
 
 type StatementLike = {
-  run: (...args: any[]) => { changes?: number } | void;
+  run: (...args: any[]) => { changes: number };
   all: (...args: any[]) => any[];
   get?: (...args: any[]) => any | undefined;
 };
@@ -27,8 +27,10 @@ let db: DatabaseLike;
 
 async function initDb(): Promise<DatabaseLike> {
   try {
-    // Try native driver first
-    const BetterSqlite3 = (await import('better-sqlite3')).default as any;
+    // Try native driver first (use require to avoid TS module resolution when optional dep is absent)
+    const require = createRequire(import.meta.url);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const BetterSqlite3 = require('better-sqlite3') as any;
     const nativeDb = new BetterSqlite3(DB_FILE);
     if (typeof nativeDb.pragma === 'function') {
       nativeDb.pragma('journal_mode = WAL');
@@ -36,8 +38,10 @@ async function initDb(): Promise<DatabaseLike> {
     return nativeDb as DatabaseLike;
   } catch {
     // Fallback: sql.js (WASM)
+    // @ts-ignore optional dependency resolved at runtime
     const initSqlJs = (await import('sql.js')).default as any;
     const require = createRequire(import.meta.url);
+    // @ts-ignore optional dependency subpath resolution for wasm asset
     const wasmPath: string = require.resolve('sql.js/dist/sql-wasm.wasm');
     const SQL = await initSqlJs({
       locateFile: (file: string) => {
