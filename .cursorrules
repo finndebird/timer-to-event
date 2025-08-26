@@ -1,0 +1,8 @@
+# Projektweite Cursor-Regeln
+
+- Antworte standardmäßig auf Deutsch.
+- Bevorzuge klare, knappe Antworten; nur bei Bedarf Details.
+- Codebasis: TypeScript (strict), ESM ("type": "module"), NodeNext.
+- Zeitzone: Europe/Berlin (bei Beispielen/Datumsangaben).
+- Keine Geheimnisse/Token in Commits; `.env` bleibt privat.
+- Vorschläge für Codeänderungen: einheitlicher, gut lesbarer Stil; keine überflüssigen Einzeiler.

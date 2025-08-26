@@ -1,0 +1,11 @@
+node_modules
+dist
+data.sqlite*
+*.log
+.env
+.DS_Store
+.idea
+.fleet
+.git
+
+
