@@ -24,7 +24,7 @@ export const timerCommand = new SlashCommandBuilder()
       .addStringOption((o) =>
         o
           .setName('date')
-          .setDescription('dd.MM.yyyy-HH:mm (Europe/Berlin)')
+          .setDescription('DD.MM.YYYY-HH:MM (Europe/Berlin)')
           .setRequired(true)
       )
       .addStringOption((o) =>
@@ -54,9 +54,20 @@ export const timerCommand = new SlashCommandBuilder()
       .addStringOption((o) =>
         o
           .setName('date')
-          .setDescription('dd.MM.yyyy-HH:mm (Europe/Berlin)')
+          .setDescription('DD.MM.YYYY-HH:MM (Europe/Berlin)')
           .setRequired(true)
       )
+      .addChannelOption((o) =>
+        o
+          .setName('channel')
+          .setDescription('Kanal (Standard: aktueller Channel)')
+          .addChannelTypes(ChannelType.GuildText)
+      )
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName('list')
+      .setDescription('Geplante Timer anzeigen')
       .addChannelOption((o) =>
         o
           .setName('channel')
@@ -217,5 +228,70 @@ export async function handleTimer(inter: ChatInputCommandInteraction) {
         'dd.MM.yyyy HH:mm'
       )}** in ${channel} gelöscht.`
     );
+  }
+
+  if (sub === 'list') {
+    const channel = (inter.options.getChannel('channel') ??
+      inter.channel) as TextChannel | null;
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      return inter.reply({
+        content: 'Bitte einen Textkanal angeben.',
+        ephemeral: true,
+      });
+    }
+    if (!inter.guildId) {
+      return inter.reply({
+        content: 'Dieser Befehl funktioniert nur in Servern.',
+        ephemeral: true,
+      });
+    }
+
+    const rows = db
+      .prepare(
+        `
+        SELECT id, createdBy, eventTimeMs, intervalMs, nextReminderAtMs, remainingIntervals, message, createdAtMs
+        FROM timers
+        WHERE guildId = ? AND channelId = ?
+        ORDER BY eventTimeMs ASC
+        `
+      )
+      .all(inter.guildId, channel.id) as any[];
+
+    if (rows.length === 0) {
+      return inter.reply({
+        content: 'ℹ️ Keine Timer in diesem Kanal.',
+        ephemeral: true,
+      });
+    }
+
+    const now = DateTime.utc().toMillis();
+    const lines = rows.map((t, idx) => {
+      const whenLocal = DateTime.fromMillis(t.eventTimeMs)
+        .toUTC()
+        .setZone('Europe/Berlin');
+      const nextInMs = (t.nextReminderAtMs ?? t.eventTimeMs) - now;
+      const nextHuman =
+        nextInMs > 0
+          ? Duration.fromMillis(nextInMs)
+              .shiftTo('days', 'hours', 'minutes')
+              .toHuman({ unitDisplay: 'short' })
+          : 'bald';
+      const createdBy = `<@${t.createdBy}>`;
+      const hasMsg = typeof t.message === 'string' && t.message.length > 0;
+      const msgSnippet = hasMsg
+        ? ` — "${String(t.message).slice(0, 60)}${
+            String(t.message).length > 60 ? '…' : ''
+          }"`
+        : '';
+      return `${idx + 1}. ${whenLocal.toFormat(
+        'dd.MM.yyyy HH:mm'
+      )} — Intervall ${formatRelHours(
+        t.intervalMs
+      )} — nächste Erinnerung in ~ ${nextHuman} — von ${createdBy}${msgSnippet}`;
+    });
+
+    const header = `📋 Timer in ${channel} (${rows.length}):`;
+    const content = [header, ...lines].join('\n');
+    return inter.reply({ content, ephemeral: true });
   }
 }
