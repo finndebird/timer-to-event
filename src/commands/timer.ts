@@ -167,7 +167,8 @@ export async function handleTimer(inter: ChatInputCommandInteraction) {
     }
 
     const nextInMs = next - nowMs;
-    const nextIn = Duration.fromMillis(nextInMs)
+    const nextInRoundedMs = Math.round(nextInMs / 60_000) * 60_000;
+    const nextIn = Duration.fromMillis(nextInRoundedMs)
       .shiftTo('days', 'hours', 'minutes')
       .toHuman({ unitDisplay: 'short' });
     await inter.reply(
@@ -272,7 +273,7 @@ export async function handleTimer(inter: ChatInputCommandInteraction) {
       const nextInMs = (t.nextReminderAtMs ?? t.eventTimeMs) - now;
       const nextHuman =
         nextInMs > 0
-          ? Duration.fromMillis(nextInMs)
+          ? Duration.fromMillis(Math.round(nextInMs / 60_000) * 60_000)
               .shiftTo('days', 'hours', 'minutes')
               .toHuman({ unitDisplay: 'short' })
           : 'bald';
