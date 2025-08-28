@@ -1,86 +1,33 @@
-# Discord Timer Bot (TypeScript)
+## timer-to-event — Discord-Bot (TypeScript)
 
-Ein schlanker Discord-Bot, der **Events per Slash-Command** plant und **in festen Intervallen vorher erinnert** (z. B. 36 h, 24 h, 12 h vor dem Termin).
-Zeitparsing ist **deutschland-freundlich** (`dd.MM.yyyy-HH:mm`, Zone **Europe/Berlin**), Timer sind **persistent** (SQLite) und der Scheduler ist **resilient** gegen kurze Ausfälle.
+Ein kompakter Discord-Bot, der Events per Slash-Command plant und in festen Intervallen vor dem Termin erinnert. Datumsformat und Zeitzone sind auf Deutschland ausgelegt: `dd.MM.yyyy-HH:mm` in Zone `Europe/Berlin`.
 
-## Features
+### Highlights
 
-- `/timer create` — Event anlegen und in regelmäßigem Intervall erinnern
-  Beispiele: `12h`, `30m`, `45s`, `12:00:00h`, `01:30:00`
-- `/timer remove` — Timer für ein Datum (pro Kanal) löschen
-- **Persistenz:** SQLite (WAL)
-- **Scheduler:** pollt alle 30 s fällige Erinnerungen; holt nach einem Downtime Catch-up ein
-- **Einzigartigkeit:** Pro (Guild, Channel, Eventzeit) nur **ein** Timer
-- **Optionale Nachricht** pro Reminder, frei wählbarer Zielkanal
+- **Slash-Commands**: `/timer create`, `/timer remove`, `/timer list`
+- **Persistenz**: SQLite-Datei `data.sqlite`
+- **Scheduler**: prüft alle 30 s und holt verpasste Erinnerungen nach
+- **Einzigartigkeit**: pro (Guild, Kanal, Eventzeit) nur ein Timer
+- **Datenbank-Treiber**: bevorzugt `better-sqlite3`, Fallback auf `sql.js` (WASM)
 
 ---
 
 ## Quickstart
 
-> Voraussetzungen: **Node.js 18+**, Git. (Linux, macOS, Windows)
+Voraussetzungen: Node.js 18+, Git
 
 ```bash
-git clone <dein-repo>
-cd discord-timer-bot
-# mit Yarn (empfohlen)
-yarn
-# oder mit npm
-# npm install
+git clone https://github.com/finndebird/timer-to-event.git
+cd timer-to-event
+yarn # oder npm install
 ```
 
-Erstelle eine `.env` (siehe unten) und starte lokal:
+`.env` erstellen (siehe Konfiguration) und starten:
 
 ```bash
-# Dev
+# Entwicklung (hot reload per nodemon)
 yarn dev
-# oder npm run dev
-```
 
----
-
-## Discord-App & Bot einrichten
-
-1. [https://discord.com/developers/applications](https://discord.com/developers/applications) → **New Application**
-2. Tab **Bot** → **Add Bot** → Token kopieren
-3. **OAuth2 → URL Generator**
-
-   - Scopes: `bot`, `applications.commands`
-   - Bot Permissions: mindestens `Send Messages`
-
-4. Bot mit der generierten URL auf deinen Server einladen
-5. (Optional) Für schnellere Command-Updates: `GUILD_ID` deiner Dev-Guild notieren
-
----
-
-## Konfiguration
-
-`.env` anlegen:
-
-```ini
-DISCORD_TOKEN=dein_bot_token
-APPLICATION_ID=deine_application_id
-GUILD_ID=optional_guild_id_fuer_dev_registrierung
-TZ=Europe/Berlin
-```
-
----
-
-## Installation & Scripts
-
-```json
-{
-  "type": "module",
-  "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/bot.ts",
-    "build": "tsc -p .",
-    "start": "node dist/bot.js"
-  }
-}
-```
-
-```bash
-# Entwicklung
-yarn dev
 # Produktion
 yarn build
 yarn start
@@ -88,149 +35,118 @@ yarn start
 
 ---
 
-## Slash-Commands
+## Discord-App einrichten
+
+1. `https://discord.com/developers/applications` → New Application
+2. Tab Bot → Add Bot → Token kopieren
+3. OAuth2 → URL Generator
+   - Scopes: `bot`, `applications.commands`
+   - Permissions: mindestens `Send Messages`
+4. Bot mit der URL auf deinem Server hinzufügen
+5. Optional: `GUILD_ID` deiner Dev-Guild notieren (schnellere Command-Updates)
+
+Hinweis: Die Slash-Commands werden beim Start automatisch registriert (Guild, wenn `GUILD_ID` gesetzt; sonst global – kann bis zu 1 Stunde dauern).
+
+---
+
+## Konfiguration
+
+`.env` im Projektverzeichnis anlegen:
+
+```ini
+DISCORD_TOKEN=dein_bot_token
+APPLICATION_ID=deine_application_id
+GUILD_ID=optional_guild_id_fuer_dev_registrierung
+```
+
+Zeitzone wird im Code explizit auf `Europe/Berlin` gesetzt. Du musst keine `TZ`-Variable setzen.
+
+---
+
+## Befehle
 
 ### `/timer create`
 
-- `date` (erforderlich): `dd.MM.yyyy-HH:mm` (z. B. `20.09.2025-10:00`)
-- `remind` (erforderlich): Intervall – Beispiele:
+- **date** (erforderlich): `dd.MM.yyyy-HH:mm` — z. B. `20.09.2025-10:00`
+- **remind** (erforderlich): Intervall, z. B. `12h`, `30m`, `45s`, `12:00:00h`, `01:30:00`
+- **channel** (optional): Ziel-Textkanal (Standard: aktueller Kanal)
+- **message** (optional): Zusatztext je Erinnerung
 
-  - `12h`, `30m`, `45s`
-  - `12:00:00h` (Suffix `h` wird toleriert)
-  - `01:30:00` (hh\:mm\:ss)
+Beispiel:
 
-- `channel` (optional): Ziel-Textkanal (Standard: aktueller Kanal)
-- `message` (optional): Zusatztext für jede Erinnerung
-
-**Beispiel:**
-
-```
+```text
 /timer create date:20.09.2025-10:00 remind:12h channel:#ankündigungen message:"Release in Kürze!"
 ```
 
-> Der Bot plant Erinnerungen **alle X Stunden vor dem Event**: …, 36h, 24h, 12h. Liegt der erste Slot bereits in der Vergangenheit, springt er automatisch zum nächsten zukünftigen Slot.
+Der Bot plant Erinnerungen in festen Abständen vor dem Event (…, 36h, 24h, 12h …). Wenn der erste Slot bereits in der Vergangenheit liegt, springt er automatisch zum nächsten zukünftigen Slot.
 
 ### `/timer remove`
 
-- `date` (erforderlich): `dd.MM.yyyy-HH:mm`
-- `channel` (optional): Standard ist der aktuelle Kanal
+- **date** (erforderlich): `dd.MM.yyyy-HH:mm`
+- **channel** (optional): Standard ist der aktuelle Kanal
 
-**Beispiel:**
+### `/timer list`
 
-```
-/timer remove date:20.09.2025-10:00
-```
+- **channel** (optional): Standard ist der aktuelle Kanal
 
 ---
 
 ## Projektstruktur
 
-```
+```text
 .
 ├─ src/
-│  └─ bot.ts          # Bot-Logik, Commands, Scheduler
-├─ data.sqlite        # SQLite-DB (wird automatisch angelegt)
-├─ .env
+│  ├─ bot.ts           # Bot-Start, Registrierung, Scheduler-Start
+│  ├─ commands/
+│  │  ├─ index.ts      # Slash-Command-Registrierung
+│  │  └─ timer.ts      # create/remove/list Implementierungen
+│  ├─ scheduler.ts     # periodisches Senden und Nachplanen
+│  ├─ time.ts          # Parsing/Planungs-Utilities (Luxon)
+│  ├─ db.ts            # DB-Bootstrap (better-sqlite3 → sql.js Fallback)
+│  └─ config.ts        # ENV-Variablen
+├─ data.sqlite         # wird automatisch erzeugt
+├─ nodemon.json        # Dev-Runner (ts-node/esm)
 ├─ tsconfig.json
 └─ package.json
 ```
 
-**Wichtige Abhängigkeiten**
-
-- [`discord.js`](https://github.com/discordjs/discord.js) – Bot API
-- [`luxon`](https://moment.github.io/luxon/) – Zeit/Zeitzonen
-- [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3) – schnelle, synchrone SQLite-Bindings
-- `dotenv`, `zod` (Validierung optional)
+Wichtige Abhängigkeiten: `discord.js` (v14), `luxon`, `dotenv`, optional `better-sqlite3` (nativ, schnell) mit Fallback `sql.js` (WASM).
 
 ---
 
-## Hosting
+## Betrieb & Datenbank
 
-### Option A: Raspberry Pi / eigener Server
+- Datei: `data.sqlite` im Projektverzeichnis
+- Bei nativem Treiber wird WAL aktiviert (bessere Robustheit). Beim WASM-Fallback wird die Datei nach Mutationen persistiert.
+- Backups: Datei regelmäßig sichern (z. B. `cp data.sqlite backup-YYYYMMDD.sqlite`).
 
-- ✅ Günstig, stromsparend, volle Kontrolle
-- ⚠️ Uptime hängt an Netzwerk/Power
-- **Empfohlen:** Node 18+, `pm2`, regelmäßige Backups von `data.sqlite`
+Beispiel PM2 (Serverbetrieb):
 
 ```bash
-# Build einmalig
 yarn build
-
-# pm2 installieren und starten
 npm i -g pm2
 pm2 start dist/bot.js --name timer-bot
 pm2 save && pm2 startup
 ```
 
-### Option B: VPS / Cloud
-
-- ✅ 24/7 stabil, bessere Netzqualität
-- ⚠️ Kosten (kleiner VPS reicht)
-- Gleiches Setup wie oben; zusätzlich automatische Backups (z. B. tägliches Snapshot/rsync)
-
-> **Nicht geeignet:** klassische „Serverless“-Funktionen (keine dauerhafte WebSocket-Verbindung).
-
 ---
 
-## Datenbank & Backups
+## Troubleshooting
 
-- Datei: `data.sqlite` (WAL-Modus aktiv)
-- Backup (Linux Beispiel):
-
-  ```bash
-  sqlite3 data.sqlite ".backup 'backup-$(date +%F_%H%M).sqlite'"
-  ```
-
-- Restore: Datei ersetzen und Bot neu starten
-
----
-
-## Häufige Probleme
-
-- **Slash-Commands erscheinen nicht**
-
-  - Prüfe `APPLICATION_ID`
-  - Bei globaler Registrierung kann es bis zu 1 h dauern
-  - Für schnelle Iteration `GUILD_ID` setzen
-
-- **Bot darf nicht schreiben**
-
-  - Channel-Permissions prüfen (Rolle des Bots)
-
-- **`better-sqlite3` Build-Fehler**
-
-  - Stelle sicher, dass Node-Version passt.
-  - Linux: ggf. Build-Tools installieren (`build-essential`, `python3`, `make`, `g++`)
-
----
-
-## Roadmap / Ideen
-
-- `/timer list` & `/timer clear`
-- 0-Stunden-Reminder direkt zum Event
-- Pro-Guild Standard-Kanal speichern
-- Postgres/Prisma für horizontale Skalierung
-- i18n
+- Slash-Commands erscheinen nicht? `APPLICATION_ID` prüfen; global kann bis zu 1 h dauern; für schnelle Iteration `GUILD_ID` setzen.
+- Bot kann nicht schreiben? Channel-Permissions der Bot-Rolle prüfen.
+- `better-sqlite3` Build-Probleme? Node-Version prüfen; auf Linux ggf. Build-Tools installieren (`build-essential`, `python3`, `make`, `g++`).
 
 ---
 
 ## Entwicklung
 
-- Code-Style: TypeScript strict, ESM (`"type": "module"`)
-- Zeitzone: `Europe/Berlin`
-- Intervall-Parsing robust (siehe Beispiele oben)
-- Scheduler-Tick: 30 s (konfigurierbar)
-
----
-
-## Sicherheit
-
-- **Token niemals committen!**
-- `.env` in `.gitignore` lassen
-- Bot-Rechte minimal halten (i. d. R. reicht `Send Messages`)
+- TypeScript strict, ESM (`"type": "module"`), `module` = `NodeNext`
+- Scheduler-Tick: 30 s (Konstante in `startScheduler`)
+- Zeiten werden intern in UTC gespeichert, Anzeige/Parsing in `Europe/Berlin`.
 
 ---
 
 ## Lizenz
 
-MIT – feel free to use & adapt.
+MIT
